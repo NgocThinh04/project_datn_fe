@@ -5,32 +5,35 @@ import {
   Building2,
   ShieldCheck,
 } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function HomePage() {
-  // SAU NÀY THAY = DATA TỪ API
-  const user = {
-    name: "Nguyễn Văn A",
-    email: "nguyenvana@gmail.com",
-    phone: "0123 456 789",
-    company: "ABC Technology",
-    role: "Nhân viên",
+  const { user } = useAuth(); 
+  
+  const displayUser = {
+    name: user?.name || user?.username || "Chưa có tên",
+    email: user?.email || "Chưa có email",
+    phone: user?.number_phone || "Chưa có số điện thoại",
+    company: user?.companyCode || "Chưa có mã công ty",
+    role: user?.role || "Chưa có role",
   };
+
 
   return (
     <div style={styles.container}>
       {/* PROFILE */}
       <div style={styles.profileCard}>
         <div style={styles.avatar}>
-          {user.name.charAt(0)}
+          {displayUser.name.charAt(0)}
         </div>
 
         <div>
           <h1 style={styles.name}>
-            {user.name}
+            {displayUser.name}
           </h1>
 
           <p style={styles.role}>
-            {user.role}
+            {displayUser.role}
           </p>
         </div>
       </div>
@@ -44,7 +47,7 @@ export default function HomePage() {
             <p style={styles.label}>Email</p>
 
             <h3 style={styles.value}>
-              {user.email}
+              {displayUser.email}
             </h3>
           </div>
         </div>
@@ -58,7 +61,7 @@ export default function HomePage() {
             </p>
 
             <h3 style={styles.value}>
-              {user.phone}
+              {displayUser.phone}
             </h3>
           </div>
         </div>
@@ -72,7 +75,7 @@ export default function HomePage() {
             </p>
 
             <h3 style={styles.value}>
-              {user.company}
+              {displayUser.company}
             </h3>
           </div>
         </div>
@@ -86,7 +89,7 @@ export default function HomePage() {
             </p>
 
             <h3 style={styles.value}>
-              {user.role}
+              {displayUser.role}
             </h3>
           </div>
         </div>

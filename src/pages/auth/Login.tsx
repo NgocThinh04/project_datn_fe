@@ -3,6 +3,7 @@ import { useState } from "react";
 import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+
 interface LoginForm {
   username: string;
   password: string;
@@ -10,97 +11,134 @@ interface LoginForm {
 }
 
 export default function Login() {
-    const navigate = useNavigate();
-    const { login, loading } = useAuth();
-    
+  const navigate = useNavigate();
+  const { login, loading, user } = useAuth();
+  
   const [form, setForm] = useState<LoginForm>({
     username: "",
     password: "",
     companyCode: "",
   });
+  
+  const [error, setError] = useState<string>("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({
       ...form,
       [e.target.name]: e.target.value,
     });
+    setError("");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login:", form);
+    setError("");
+    
+    // Validate
+    if (!form.username || !form.password || !form.companyCode) {
+      setError("Vui lòng nhập đầy đủ thông tin");
+      return;
+    }
 
-    // TODO: call API Spring Boot
+    try {
+      const response = await login(form);
+      
+      // Kiểm tra role từ response hoặc từ user context
+      const userRole = response?.role || user?.role;
+      
+      // Chuyển hướng dựa trên role
+      if (userRole === 'Admin' || userRole === 'ADMIN' || userRole === 'admin') {
+        navigate('/admin');
+      } else if (userRole === 'User' || userRole === 'USER' || userRole === 'user') {
+        navigate('/user');
+      } else {
+        // Mặc định chuyển về trang chủ
+        navigate('/');
+      }
+    } catch (err: any) {
+      setError(err.error || "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin");
+    }
   };
-const [showPassword, setShowPassword] = useState(false);
+
   return (
     <div style={styles.container}>
       <form style={styles.form} onSubmit={handleSubmit}>
         <h2 style={styles.title}>Chào mừng trở lại</h2>
 
-<div style={styles.inputWrapper}>
-  <FaUser style={styles.icon} />
+        {error && (
+          <div style={styles.errorMessage}>
+            {error}
+          </div>
+        )}
 
-  <input
-    name="username"
-    placeholder="Email"
-    value={form.username}
-    onChange={handleChange}
-    style={styles.inputWithIcon}
-  />
-</div>
-<div style={styles.inputWrapper}>
-  <FaLock style={styles.icon} />
+        <div style={styles.inputWrapper}>
+          <FaUser style={styles.icon} />
+          <input
+            name="username"
+            placeholder="Tên đăng nhập"
+            value={form.username}
+            onChange={handleChange}
+            style={styles.inputWithIcon}
+            disabled={loading}
+          />
+        </div>
 
-  <input
-    type={showPassword ? "text" : "password"}
-    name="password"
-    placeholder="Password"
-    value={form.password}
-    onChange={handleChange}
-    style={styles.inputWithIcon}
-  />
+        <div style={styles.inputWrapper}>
+          <FaLock style={styles.icon} />
+          <input
+            type={showPassword ? "text" : "password"}
+            name="password"
+            placeholder="Mật khẩu"
+            value={form.password}
+            onChange={handleChange}
+            style={styles.inputWithIcon}
+            disabled={loading}
+          />
+          <span
+            style={styles.toggleIcon}
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <FaEyeSlash /> : <FaEye />}
+          </span>
+        </div>
 
-  <span
-    style={styles.toggleIcon}
-    onClick={() => setShowPassword(!showPassword)}
-  >
-    {showPassword ? <FaEyeSlash /> : <FaEye />}
-  </span>
-</div>
-<div style={styles.inputWrapper}>
-  <FaUser style={styles.icon} />
+        <div style={styles.inputWrapper}>
+          <FaUser style={styles.icon} />
+          <input
+            name="companyCode"
+            placeholder="Mã công ty"
+            value={form.companyCode}
+            onChange={handleChange}
+            style={styles.inputWithIcon}
+            disabled={loading}
+          />
+        </div>
 
-  <input
-    name="company"
-    placeholder="Mã công ty"
-    value={form.companyCode}
-    onChange={handleChange}
-    style={styles.inputWithIcon}
-  />
-</div>
-<button
-  style={styles.button}
-  onMouseOver={(e) =>
-    (e.currentTarget.style.transform = "scale(1.05)")
-  }
-  onMouseOut={(e) =>
-    (e.currentTarget.style.transform = "scale(1)")
-  }
->
-  Đăng nhập
-</button>
+        <button
+          type="submit"
+          style={styles.button}
+          disabled={loading}
+          onMouseOver={(e) =>
+            (e.currentTarget.style.transform = "scale(1.05)")
+          }
+          onMouseOut={(e) =>
+            (e.currentTarget.style.transform = "scale(1)")
+          }
+        >
+          {loading ? "Đang xử lý..." : "Đăng nhập"}
+        </button>
 
-<button
-  type="button"
-  style={styles.registerButton}
-  onClick={() => {
-    window.location.href = "/register-company";
-  }}
->
-  Đăng ký công ty
-</button>
-
+        <button
+          type="button"
+          style={styles.registerButton}
+          onClick={() => {
+            navigate("/register-company");
+          }}
+          disabled={loading}
+        >
+          Đăng ký công ty
+        </button>
       </form>
     </div>
   );
@@ -115,7 +153,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: "center",
     background: "linear-gradient(135deg, #667eea, #764ba2)",
   },
-
   form: {
     background: "rgba(255, 255, 255, 0.95)",
     padding: "40px 30px",
@@ -125,9 +162,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: "column",
     gap: "16px",
     boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-    backdropFilter: "blur(10px)", 
+    backdropFilter: "blur(10px)",
   },
-
   title: {
     textAlign: "center",
     fontSize: "24px",
@@ -135,16 +171,34 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#333",
     marginBottom: "10px",
   },
-
-  input: {
-    padding: "14px",
+  inputWrapper: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    width: "100%",
+  },
+  icon: {
+    position: "absolute",
+    left: "12px",
+    color: "#888",
+    zIndex: 1,
+  },
+  inputWithIcon: {
+    width: "100%",
+    padding: "14px 14px 14px 40px",
     borderRadius: "10px",
     border: "1px solid #ddd",
     outline: "none",
     fontSize: "14px",
-    transition: "0.2s",
+    boxSizing: "border-box",
   },
-
+  toggleIcon: {
+    position: "absolute",
+    right: "12px",
+    cursor: "pointer",
+    color: "#888",
+    zIndex: 1,
+  },
   button: {
     padding: "14px",
     background: "linear-gradient(135deg, #667eea, #5a67d8)",
@@ -155,49 +209,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: "bold",
     fontSize: "15px",
     transition: "0.3s",
+    marginTop: "10px",
   },
-
-  link: {
+  registerButton: {
+    padding: "14px",
+    background: "white",
+    color: "#667eea",
+    border: "2px solid #667eea",
+    borderRadius: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "15px",
+    transition: "0.3s",
+  },
+  errorMessage: {
+    backgroundColor: "#fee",
+    color: "#c33",
+    padding: "10px",
+    borderRadius: "8px",
     textAlign: "center",
     fontSize: "14px",
-    color: "#555",
   },
-  //input
-  inputWrapper: {
-  position: "relative",
-  display: "flex",
-  alignItems: "center",
-},
-
-icon: {
-  position: "absolute",
-  left: "12px",
-  color: "#888",
-},
-
-inputWithIcon: {
-  width: "100%",
-  padding: "14px 14px 14px 40px",
-  borderRadius: "10px",
-  border: "1px solid #ddd",
-  outline: "none",
-},
-
-toggleIcon: {
-  position: "absolute",
-  right: "12px",
-  cursor: "pointer",
-  color: "#888",
-},
-registerButton: {
-  padding: "14px",
-  background: "white",
-  color: "#667eea",
-  border: "2px solid #667eea",
-  borderRadius: "10px",
-  cursor: "pointer",
-  fontWeight: "bold",
-  fontSize: "15px",
-  transition: "0.3s",
-},
 };
