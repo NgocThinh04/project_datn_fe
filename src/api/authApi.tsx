@@ -15,18 +15,54 @@ import type {
 
 const authApi = {
   // Đăng nhập
-  login: async (credentials: LoginRequest): Promise<LoginResponse> => {
-    const response = await axiosInstance.post(`/auth/login`, credentials);
-    return response.data;
-  },
+login: async (credentials: LoginRequest): Promise<LoginResponse> => {
+  const response = await axiosInstance.post(`/auth/login`, credentials);
+  const data = response.data;
+  
+  // Lưu token
+  localStorage.setItem('accessToken', data.accessToken || data.token);
+  if (data.refreshToken) {
+    localStorage.setItem('refreshToken', data.refreshToken);
+  }
+  
+  // Lưu companyId riêng (để dễ lấy)
+  try {
+    if (data.companyId) {
+      localStorage.setItem('companyId', data.companyId);
+      console.log('4️⃣ ✅ Saved companyId:', localStorage.getItem('companyId'));
+    } else {
+      console.error('4️⃣ ❌ companyId is null/undefined');
+      // Thử lưu bằng UUID mặc định để test
+      localStorage.setItem('companyId', 'fallback-company-id');
+    }
+  } catch (e) {
+    console.error('Error saving to localStorage:', e);
+  }
+  
+  // Lưu toàn bộ user info
+  const userData = {
+    username: data.username,
+    role: data.role,
+    companyId: data.companyId,
+    companyCode: data.companyCode,
+    email: data.email,
+    address: data.address,
+    number_phone: data.number_phone,
+    create_at: data.create_at,
+    name: data.name || data.username
+  };
+  localStorage.setItem('user', JSON.stringify(userData));
+  
+  return data;
+},
   
   // Đăng xuất
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    // Xóa token khỏi headers của axios
-    delete axiosInstance.defaults.headers.common['Authorization'];
-  },
+logout: () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  delete axiosInstance.defaults.headers.common['Authorization'];
+},
   
   // Lấy thông tin user hiện tại từ localStorage
   getCurrentUser: (): UserData | null => {
@@ -112,18 +148,18 @@ const authApi = {
   },
   
   // Refresh token (lấy token mới khi token cũ hết hạn)
-  refreshToken: async (): Promise<{ token: string }> => {
-    try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      const response = await axiosInstance.post('/auth/refresh-token', { refreshToken });
-      const { token } = response.data;
-      localStorage.setItem('token', token);
-      axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      return { token };
-    } catch (error: any) {
-      throw error.response?.data || { error: 'Refresh token failed' };
-    }
-  },
+refreshToken: async (): Promise<{ accessToken: string }> => {
+  try {
+    const refreshToken = localStorage.getItem('refreshToken');
+    const response = await axiosInstance.post('/auth/refresh-token', { refreshToken });
+    const { accessToken } = response.data;
+    localStorage.setItem('accessToken', accessToken);
+    axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+    return { accessToken };
+  } catch (error: any) {
+    throw error.response?.data || { error: 'Refresh token failed' };
+  }
+},
   
   // Xác thực email
   verifyEmail: async (token: string): Promise<ApiResponse> => {

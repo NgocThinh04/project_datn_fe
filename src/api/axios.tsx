@@ -1,3 +1,4 @@
+// api/axios.ts
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig, AxiosError } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -14,12 +15,11 @@ const axiosInstance: AxiosInstance = axios.create({
 // Request interceptor - tự động thêm token
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-
     if (import.meta.env.MODE === 'development') {
       console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, config.data);
     }
@@ -51,27 +51,41 @@ const processQueue = (error: Error | null, token: string | null = null) => {
 };
 
 axiosInstance.interceptors.response.use(
-  (response) => {
-    // Log response trong development - SỬA: dùng import.meta.env
-    if (import.meta.env.MODE === 'development') {
-      console.log(`[API Response] ${response.config.url}`, response.data);
-    }
-    return response;
-  },
+  (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     
+    // Log lỗi chi tiết
+    console.log('🔍 Error response:', {
+      status: error.response?.status,
+      url: originalRequest?.url,
+      message: error.message
+    });
+    
+    // Nếu lỗi 401 và chưa retry
     if (error.response?.status === 401 && !originalRequest._retry) {
+      
+      // KIỂM TRA: Nếu là request đăng ký hoặc login, KHÔNG xử lý refresh token
+      const isAuthRequest = originalRequest.url?.includes('/auth/login') ||
+                           originalRequest.url?.includes('/auth/register') ||
+                           originalRequest.url?.includes('/auth/register-company') ||
+                           originalRequest.url?.includes('/auth/refresh-token');
+      
+      if (isAuthRequest) {
+        console.log('🔐 Auth request failed, no refresh needed');
+        return Promise.reject(error);
+      }
+      
       if (isRefreshing) {
+        console.log('⏳ Waiting for token refresh...');
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
-          .then(() => {
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
             return axiosInstance(originalRequest);
           })
-          .catch((err) => {
-            return Promise.reject(err);
-          });
+          .catch((err) => Promise.reject(err));
       }
       
       originalRequest._retry = true;
@@ -79,24 +93,38 @@ axiosInstance.interceptors.response.use(
       
       try {
         const refreshToken = localStorage.getItem('refreshToken');
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-          const { token } = response.data;
-          
-          localStorage.setItem('token', token);
-          axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          
-          processQueue(null, token);
-          return axiosInstance(originalRequest);
-        } else {
+        console.log('🔄 Refresh token attempt, has refreshToken:', !!refreshToken);
+        
+        if (!refreshToken) {
           throw new Error('No refresh token');
         }
-      } catch (refreshError) {
+        
+        // QUAN TRỌNG: Dùng axiosInstance thay vì axios để có baseURL
+        const response = await axiosInstance.post('/auth/refresh-token', { refreshToken });
+        console.log('📡 Refresh response:', response.data);
+        
+        const newToken = response.data.token || response.data.accessToken;
+        
+        if (newToken) {
+          localStorage.setItem('accessToken', newToken);
+          axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+          
+          console.log('✅ Token refreshed successfully');
+          processQueue(null, newToken);
+          
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return axiosInstance(originalRequest);
+        } else {
+          throw new Error('No token in refresh response');
+        }
+      } catch (refreshError: any) {
+        console.error('❌ Refresh token failed:', refreshError.response?.data || refreshError.message);
         processQueue(refreshError as Error, null);
         
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        localStorage.removeItem('companyId');
         delete axiosInstance.defaults.headers.common['Authorization'];
         
         if (typeof window !== 'undefined') {
@@ -129,7 +157,7 @@ export const removeAuthToken = () => {
 };
 
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem('token');
+  return localStorage.getItem('accessToken');
 };
 
 export default axiosInstance;

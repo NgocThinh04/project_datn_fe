@@ -108,7 +108,7 @@ export default function RegisterCompany() {
       // Redirect to login after 2 seconds
       setTimeout(() => {
         navigate("/");
-      }, 2000);
+      }, 1000);
       
     } catch (err: any) {
       setError(err.error || "Đăng ký thất bại. Vui lòng thử lại.");

@@ -47,6 +47,7 @@ export interface ResetPasswordRequest {
 // Response types
 export interface LoginResponse {
   token: string;
+  refreshToken: string;
   username: string;
   role: string;
   companyId: string;
