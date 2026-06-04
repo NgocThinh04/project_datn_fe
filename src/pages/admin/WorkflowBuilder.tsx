@@ -14,6 +14,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import workflowService, { type WorkflowData } from "../../services/workflowService";
+import positionService, { type PositionType } from "../../services/positionService";
 
 /* ================= CUSTOM EDGE COMPONENT ================= */
 const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, style, markerEnd }: any) => {
@@ -141,9 +142,11 @@ export default function WorkflowBuilder() {
   const [workflowName, setWorkflowName] = useState<string>("");
   const [workflowDescription, setWorkflowDescription] = useState<string>("");
 
-  const [roles, setRoles] = useState<string[]>([]);
-  const [newRole, setNewRole] = useState("");
-  const [showRoleInput, setShowRoleInput] = useState(false);
+  // State cho chức vụ (positions) - lấy từ BE
+ const [positions, setPositions] = useState<PositionType[]>([]);
+  const [positionsLoading, setPositionsLoading] = useState(false);
+  const [showAddPositionModal, setShowAddPositionModal] = useState(false);
+  const [newPositionName, setNewPositionName] = useState("");
 
   const [showSidebar, setShowSidebar] = useState(true);
   const [showProperties, setShowProperties] = useState(true);
@@ -159,26 +162,63 @@ export default function WorkflowBuilder() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  /* ================= LOAD ROLES ================= */
-  useEffect(() => {
-    const savedRoles = localStorage.getItem("workflow_roles");
-    if (savedRoles) {
-      try {
-        const parsed = JSON.parse(savedRoles);
-        setRoles(parsed);
-      } catch (e) {
-        console.error("Error parsing roles", e);
-        setDefaultRoles();
-      }
-    } else {
-      setDefaultRoles();
-    }
-  }, []);
+  /* ================= LOAD POSITIONS FROM BACKEND ================= */
+const loadPositions = async () => {
+  setPositionsLoading(true);
+  try {
+    const positionsFromBE = await positionService.getAllPositions();
+    console.log("📋 Positions from BE:", positionsFromBE);
+    setPositions(positionsFromBE);
+  } catch (err: any) {
+    console.error("Load positions error:", err);
+  } finally {
+    setPositionsLoading(false);
+  }
+};
 
-  const setDefaultRoles = () => {
-    const defaults = ["MANAGER", "HR", "CEO", "ACCOUNTANT"];
-    setRoles(defaults);
-    localStorage.setItem("workflow_roles", JSON.stringify(defaults));
+  /* ================= ADD POSITION ================= */
+const handleAddPosition = async () => {
+  if (!newPositionName.trim()) {
+    alert("Vui lòng nhập tên chức vụ");
+    return;
+  }
+
+  try {
+    await positionService.createPosition({ positionName: newPositionName.trim() });
+    console.log("✅ Created position");
+    await loadPositions();
+    setShowAddPositionModal(false);
+    setNewPositionName("");
+    alert("Thêm chức vụ thành công!");
+  } catch (err: any) {
+    console.error("Add position error:", err);
+    alert(err.message || "Thêm chức vụ thất bại");
+  }
+};
+
+  /* ================= DELETE POSITION ================= */
+  const handleDeletePosition = async (positionId: string, positionName: string) => {
+    if (!window.confirm(`Bạn có chắc muốn xóa chức vụ "${positionName}"?`)) return;
+
+    try {
+      await positionService.deletePosition(positionId);
+      console.log("✅ Deleted position:", positionId);
+      await loadPositions();
+      
+      // Xóa chức vụ khỏi các node nếu đang được sử dụng
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.data.assignedRole === positionName
+            ? { ...n, data: { ...n.data, assignedRole: "" } }
+            : n
+        )
+      );
+      
+      alert("Xóa chức vụ thành công!");
+    } catch (err: any) {
+      console.error("Delete position error:", err);
+      alert(err.message || "Xóa chức vụ thất bại");
+    }
   };
 
   /* ================= LOAD WORKFLOWS FROM BACKEND ================= */
@@ -216,12 +256,10 @@ export default function WorkflowBuilder() {
       const updatedWorkflow = await workflowService.updateWorkflowStatus(workflowId, newStatus);
       console.log(`✅ Updated workflow ${workflowId} status to: ${newStatus}`);
       
-      // Cập nhật lại danh sách workflows
       setWorkflows(prev => prev.map(w => 
         w.workflowId === workflowId ? { ...w, status: newStatus } : w
       ));
       
-      // Hiển thị thông báo
       const saveIndicator = document.getElementById("save-indicator");
       if (saveIndicator) {
         saveIndicator.style.background = "#10b981";
@@ -295,10 +333,9 @@ export default function WorkflowBuilder() {
       
       if (existingWorkflow) {
         savedWorkflow = await workflowService.updateWorkflow(currentWorkflowId, workflowData);
-        // Cập nhật workflow trong state mà KHÔNG ảnh hưởng đến status
         setWorkflows(prev => prev.map(w => 
           w.workflowId === currentWorkflowId 
-            ? { ...savedWorkflow, status: w.status } // Giữ nguyên status hiện tại
+            ? { ...savedWorkflow, status: w.status }
             : w
         ));
       } else {
@@ -309,8 +346,6 @@ export default function WorkflowBuilder() {
       setCurrentWorkflowId(savedWorkflow.workflowId);
       setWorkflowName(savedWorkflow.name);
       setWorkflowDescription(savedWorkflow.description || "");
-      
-      // KHÔNG GỌI loadWorkflowsFromBackend() để tránh rollback status
       
       const saveIndicator = document.getElementById("save-indicator");
       if (saveIndicator) {
@@ -438,7 +473,6 @@ export default function WorkflowBuilder() {
   /* ================= RENAME WORKFLOW ================= */
   const renameWorkflow = async (workflowId: string, newName: string, oldName: string) => {
     if (!newName.trim()) {
-      // Rollback nếu tên rỗng
       setWorkflows(prev => prev.map(w => 
         w.workflowId === workflowId ? { ...w, name: oldName } : w
       ));
@@ -465,7 +499,6 @@ export default function WorkflowBuilder() {
       console.error('Rename workflow error:', error);
       setError('Đổi tên thất bại');
       
-      // Rollback nếu lỗi
       setWorkflows(prev => prev.map(w => 
         w.workflowId === workflowId ? { ...w, name: oldName } : w
       ));
@@ -603,36 +636,6 @@ export default function WorkflowBuilder() {
     setSelectedEdge(edge);
   }, []);
 
-  /* ================= ROLE OPERATIONS ================= */
-  const addRole = () => {
-    if (!newRole.trim()) return;
-    const upper = newRole.toUpperCase().trim();
-    if (roles.includes(upper)) {
-      alert("⚠️ Role đã tồn tại!");
-      return;
-    }
-    const newRoles = [...roles, upper];
-    setRoles(newRoles);
-    setNewRole("");
-    setShowRoleInput(false);
-    localStorage.setItem("workflow_roles", JSON.stringify(newRoles));
-  };
-
-  const deleteRole = (role: string) => {
-    if (window.confirm(`Xóa role "${role}"?`)) {
-      const newRoles = roles.filter((r) => r !== role);
-      setRoles(newRoles);
-      localStorage.setItem("workflow_roles", JSON.stringify(newRoles));
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.data.assignedRole === role
-            ? { ...n, data: { ...n.data, assignedRole: "" } }
-            : n
-        )
-      );
-    }
-  };
-
   /* ================= DRAG & DROP ================= */
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -686,11 +689,10 @@ export default function WorkflowBuilder() {
       (n) => n.data.label === "APPROVAL" && !n.data.assignedRole
     );
     if (nodesWithoutRole.length > 0) {
-      alert(`⚠️ Có ${nodesWithoutRole.length} node APPROVAL chưa được gán vai trò!`);
+      alert(`⚠️ Có ${nodesWithoutRole.length} node APPROVAL chưa được gán chức vụ!`);
       return false;
     }
     
-    // Kiểm tra cùng step phải cùng loại connection
     const connectionsBySource: Record<string, Array<{ target: string; type: string }>> = {};
     
     edges.forEach((edge) => {
@@ -723,7 +725,6 @@ export default function WorkflowBuilder() {
       return false;
     }
     
-    // Kiểm tra tính liên thông
     const buildGraph = () => {
       const graph: Record<string, string[]> = {};
       nodes.forEach((node) => {
@@ -818,6 +819,7 @@ export default function WorkflowBuilder() {
   /* ================= INITIAL LOAD ================= */
   useEffect(() => {
     loadWorkflowsFromBackend();
+    loadPositions();
   }, []);
 
   /* ================= RENDER ================= */
@@ -1036,59 +1038,57 @@ export default function WorkflowBuilder() {
 
             <hr style={{ borderColor: "#4b5563", margin: "16px 0" }} />
 
-            <h4 style={{ marginBottom: 12 }}>👥 Vai trò ({roles.length})</h4>
-            {roles.map((role) => (
-              <div
-                key={role}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("nodeType", role)}
+            {/* DANH SÁCH CHỨC VỤ TỪ BE */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h4 style={{ margin: 0 }}>👥 Chức vụ ({positions.length})</h4>
+              <button
+                onClick={() => setShowAddPositionModal(true)}
                 style={{
-                  padding: "8px 12px",
-                  background: "#4b5563",
-                  borderRadius: 6,
-                  marginBottom: 6,
-                  cursor: "grab",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  fontSize: 13,
+                  background: "#10b981",
+                  border: "none",
+                  borderRadius: 4,
+                  padding: "4px 8px",
+                  color: "white",
+                  cursor: "pointer",
+                  fontSize: 11,
                 }}
               >
-                <span>👤 {role}</span>
-                <button
-                  onClick={() => deleteRole(role)}
-                  style={{ background: "none", border: "none", color: "#fca5a5", cursor: "pointer", fontSize: 16 }}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                + Thêm
+              </button>
+            </div>
 
-            {showRoleInput ? (
-              <div style={{ marginTop: 8 }}>
-                <input
-                  placeholder="Tên role (VD: DIRECTOR)"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                  style={{ width: "100%", padding: 8, borderRadius: 6, marginBottom: 8 }}
-                  onKeyPress={(e) => e.key === "Enter" && addRole()}
-                />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={addRole} style={{ flex: 1, padding: 6, background: "#10b981", border: "none", borderRadius: 4, color: "white", cursor: "pointer" }}>
-                    Thêm
-                  </button>
-                  <button onClick={() => { setShowRoleInput(false); setNewRole(""); }} style={{ flex: 1, padding: 6, background: "#6b7280", border: "none", borderRadius: 4, color: "white", cursor: "pointer" }}>
-                    Hủy
+            {positionsLoading ? (
+              <div style={{ textAlign: "center", padding: 20, color: "#9ca3af" }}>Đang tải...</div>
+            ) : positions.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 20, color: "#9ca3af" }}>Chưa có chức vụ nào</div>
+            ) : (
+              positions.map((position) => (
+                <div
+                  key={position.positionId}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("nodeType", position.positionName)}
+                  style={{
+                    padding: "8px 12px",
+                    background: "#4b5563",
+                    borderRadius: 6,
+                    marginBottom: 6,
+                    cursor: "grab",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: 13,
+                  }}
+                >
+                  <span>👤 {position.positionName}</span>
+                  <button
+                    onClick={() => handleDeletePosition(position.positionId!, position.positionName)}
+                    style={{ background: "none", border: "none", color: "#fca5a5", cursor: "pointer", fontSize: 16 }}
+                    title="Xóa chức vụ"
+                  >
+                    ✕
                   </button>
                 </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowRoleInput(true)}
-                style={{ width: "100%", padding: 8, background: "#8b5cf6", border: "none", borderRadius: 6, color: "white", cursor: "pointer", marginTop: 8 }}
-              >
-                + Thêm vai trò
-              </button>
+              ))
             )}
           </>
         )}
@@ -1314,7 +1314,7 @@ export default function WorkflowBuilder() {
 
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ fontWeight: 600, display: "block", marginBottom: 6, fontSize: 13 }}>
-                    👤 Vai trò phụ trách
+                    👤 Chức vụ phụ trách
                   </label>
                   <select
                     value={selectedNode.data.assignedRole || ""}
@@ -1327,9 +1327,9 @@ export default function WorkflowBuilder() {
                       fontSize: 14,
                     }}
                   >
-                    <option value="">-- Chọn vai trò --</option>
-                    {roles.map((role) => (
-                      <option key={role} value={role}>{role}</option>
+                    <option value="">-- Chọn chức vụ --</option>
+                    {positions.map((position) => (
+                      <option key={position.positionId} value={position.positionName}>{position.positionName}</option>
                     ))}
                   </select>
                 </div>
@@ -1410,7 +1410,6 @@ export default function WorkflowBuilder() {
               </>
             ) : (
               <>
-                {/* Thông tin workflow khi không chọn node/edge */}
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ fontWeight: 600, display: "block", marginBottom: 6, fontSize: 13 }}>
                     📝 Tên quy trình
@@ -1462,6 +1461,84 @@ export default function WorkflowBuilder() {
           </>
         )}
       </div>
+
+      {/* MODAL THÊM CHỨC VỤ */}
+      {showAddPositionModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            animation: "fadeIn 0.2s ease",
+          }}
+        >
+          <div
+            style={{
+              width: 400,
+              background: "#fff",
+              borderRadius: 20,
+              padding: 25,
+              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h2 style={{ marginBottom: 20, fontSize: 24, fontWeight: 700 }}>
+              ➕ Thêm chức vụ mới
+            </h2>
+
+            <input
+              placeholder="Tên chức vụ *"
+              value={newPositionName}
+              onChange={(e) => setNewPositionName(e.target.value)}
+              style={{
+                width: "95%",
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: "1px solid #d1d5db",
+                outline: "none",
+                fontSize: 14,
+              }}
+              onKeyPress={(e) => e.key === "Enter" && handleAddPosition()}
+            />
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 25 }}>
+              <button
+                onClick={() => {
+                  setShowAddPositionModal(false);
+                  setNewPositionName("");
+                }}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  border: "1px solid #d1d5db",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                Hủy
+              </button>
+
+              <button
+                onClick={handleAddPosition}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Thêm mới
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
