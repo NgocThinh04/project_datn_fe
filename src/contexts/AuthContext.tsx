@@ -65,6 +65,7 @@ const login = async (credentials: LoginRequest): Promise<LoginResponse> => {
     const refreshToken = response.refreshToken;
      console.log('companyId from response:', response.companyId);
     localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('user_id',response.user_id);
     if (refreshToken) {
       localStorage.setItem('refreshToken', refreshToken);
     }
@@ -78,6 +79,7 @@ const login = async (credentials: LoginRequest): Promise<LoginResponse> => {
     const userData: User = {
       username: response.username,
       role: response.role,
+      position: response.position,
       companyId: response.companyId,
       companyCode: response.companyCode,
       email: response.email,

@@ -46,10 +46,12 @@ export interface ResetPasswordRequest {
 
 // Response types
 export interface LoginResponse {
+  user_id: string;
   token: string;
   refreshToken: string;
   username: string;
   role: string;
+  position: string;
   companyId: string;
   companyCode: string;
   email: string;
@@ -63,6 +65,7 @@ export interface LoginResponse {
 export interface UserData {
   username: string;
   role: string;
+  position: string;
   companyId: string;
   companyCode: string;
   email: string;
@@ -83,6 +86,7 @@ export interface User {
   userId?: string;
   username: string;
   role: string;
+  position: string;
   companyId: string;
   companyCode: string;
   email: string;

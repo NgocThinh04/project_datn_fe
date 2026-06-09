@@ -15,7 +15,7 @@ export default function HomePage() {
     email: user?.email || "Chưa có email",
     phone: user?.number_phone || "Chưa có số điện thoại",
     company: user?.companyCode || "Chưa có mã công ty",
-    role: user?.role || "Chưa có role",
+    role: user?.position || "Chưa có role",
   };
 
 

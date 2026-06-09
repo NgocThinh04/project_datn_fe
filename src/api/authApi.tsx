@@ -43,6 +43,7 @@ login: async (credentials: LoginRequest): Promise<LoginResponse> => {
   const userData = {
     username: data.username,
     role: data.role,
+    position: data.position,
     companyId: data.companyId,
     companyCode: data.companyCode,
     email: data.email,

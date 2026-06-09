@@ -1,8 +1,6 @@
 // src/layout/UserLayout.tsx
-
-// import type { ReactNode } from "react";
-import {useEffect, useState, type ReactNode } from "react";
-
+import { useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   House,
   FilePlus2,
@@ -14,36 +12,75 @@ import {
   ChevronDown,
   Send,
 } from "lucide-react";
+import authService from "../../api/authApi";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface Props {
   children: ReactNode;
 }
+const getUserFromStorage = () => {
+  const userStr = localStorage.getItem('user');
+  if (userStr) {
+    try {
+      return JSON.parse(userStr);
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+      return null;
+    }
+  }
+  return null;
+};
 
-export default function UserLayout({
-  children,
-}: Props) {
-   const [showNotifications, setShowNotifications] = useState(false);
-   const [showUserMenu, setShowUserMenu] = useState(false);
-   const [showProfileModal, setShowProfileModal] = useState(false);
+export default function UserLayout({ children }: Props) {
+  const navigate = useNavigate();
+  const { user: authUser, logout: authLogout } = useAuth();
+  
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  
+  // Lấy thông tin user từ context
+  const storageUser = getUserFromStorage();
+  const user = storageUser || authUser;
 
-   useEffect(() => {
-  const handleClickOutside = () => {
-    setShowNotifications(false);
-    setShowUserMenu(false);
+  const userName = user?.name || user?.username || "Người dùng";
+  const userRole = user?.position === "Admin" ? "Quản trị viên" : (user?.position || "Nhân viên");
+  const userEmail = user?.email || "";
+  const userPhone = user?.number_phone || user?.phone || "";
+  const userAvatar = userName?.charAt(0).toUpperCase() || "U";
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setShowNotifications(false);
+      setShowUserMenu(false);
+    };
+
+    document.addEventListener("click", handleClickOutside);
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+    };
+  }, []);
+
+  // Xử lý đăng xuất
+  const handleLogout = async () => {
+    try {
+      // Gọi API logout (nếu có)
+       authService.logout();
+      
+      // Gọi logout từ context
+      if (authLogout) {
+        authLogout();
+      }
+      
+      // Chuyển hướng về trang login
+      navigate("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Vẫn chuyển hướng dù có lỗi
+      navigate("/login");
+    }
   };
 
-  document.addEventListener(
-    "click",
-    handleClickOutside
-  );
-
-  return () => {
-    document.removeEventListener(
-      "click",
-      handleClickOutside
-    );
-  };
-}, []);
   return (
     <div style={styles.container}>
       {/* HEADER */}
@@ -51,20 +88,11 @@ export default function UserLayout({
         {/* LEFT */}
         <div style={styles.logoSection}>
           <div style={styles.logoBox}>
-            <CircleUserRound
-              size={28}
-              color="white"
-            />
+            <CircleUserRound size={28} color="white" />
           </div>
-
           <div>
-            <h2 style={styles.logoTitle}>
-              User
-            </h2>
-
-            <p style={styles.logoSubTitle}>
-              Hệ thống quản lý yêu cầu
-            </p>
+            <h2 style={styles.logoTitle}>User</h2>
+            <p style={styles.logoSubTitle}>Hệ thống quản lý yêu cầu</p>
           </div>
         </div>
 
@@ -72,307 +100,203 @@ export default function UserLayout({
         <div style={styles.menu}>
           <a href="/user" style={styles.menuItem}>
             <House size={18} />
-
             <span>Trang chủ</span>
           </a>
-
-          <a
-            href="/user/create-request"
-            style={styles.menuItem}
-          >
+          <a href="/user/create-request" style={styles.menuItem}>
             <FilePlus2 size={18} />
-
             <span>Tạo yêu cầu</span>
           </a>
-
-          <a
-            href="/user/requests"
-            style={styles.menuItem}
-          >
+          <a href="/user/requests" style={styles.menuItem}>
             <ClipboardList size={18} />
-
             <span>Yêu cầu</span>
           </a>
-          <a
-  href="/user/sent-requests"
-  style={styles.menuItem}
->
-  <Send size={18} />
-
-  <span>Yêu cầu đã gửi</span>
-</a>
+          <a href="/user/sent-requests" style={styles.menuItem}>
+            <Send size={18} />
+            <span>Yêu cầu đã gửi</span>
+          </a>
         </div>
 
         {/* RIGHT */}
         <div style={styles.rightSection}>
           {/* NOTIFICATION */}
-<div style={styles.notificationWrapper}>
-  <button
-    style={styles.notificationButton}
-    onClick={(e) => {
-         e.stopPropagation();
-      setShowNotifications(
-        !showNotifications
-      );
+          <div style={styles.notificationWrapper}>
+            <button
+              style={styles.notificationButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowNotifications(!showNotifications);
+                setShowUserMenu(false);
+              }}
+            >
+              <Bell size={20} />
+              <div style={styles.notificationDot} />
+            </button>
 
-      setShowUserMenu(false);
-    }}
-  >
-    <Bell size={20} />
-
-    <div style={styles.notificationDot} />
-  </button>
-
-  {showNotifications && (
-    <div style={styles.notificationDropdown}>
-      <h4 style={styles.notificationTitle}>
-        Thông báo
-      </h4>
-
-      <div style={styles.notificationItem}>
-        <div style={styles.notificationAvatar}>
-          A
-        </div>
-
-        <div>
-          <p style={styles.notificationText}>
-            Yêu cầu của bạn đã được duyệt
-          </p>
-
-          <span
-            style={styles.notificationTime}
-          >
-            5 phút trước
-          </span>
-        </div>
-      </div>
-
-      <div style={styles.notificationItem}>
-        <div style={styles.notificationAvatar}>
-          S
-        </div>
-
-        <div>
-          <p style={styles.notificationText}>
-            Admin vừa phản hồi yêu cầu
-          </p>
-
-          <span
-            style={styles.notificationTime}
-          >
-            10 phút trước
-          </span>
-        </div>
-      </div>
-
-      <div style={styles.notificationItem}>
-        <div style={styles.notificationAvatar}>
-          H
-        </div>
-
-        <div>
-          <p style={styles.notificationText}>
-            Có cập nhật mới từ hệ thống
-          </p>
-
-          <span
-            style={styles.notificationTime}
-          >
-            30 phút trước
-          </span>
-        </div>
-      </div>
-    </div>
-  )}
-</div>
+            {showNotifications && (
+              <div style={styles.notificationDropdown}>
+                <h4 style={styles.notificationTitle}>Thông báo</h4>
+                <div style={styles.notificationItem}>
+                  <div style={styles.notificationAvatar}>A</div>
+                  <div>
+                    <p style={styles.notificationText}>Yêu cầu của bạn đã được duyệt</p>
+                    <span style={styles.notificationTime}>5 phút trước</span>
+                  </div>
+                </div>
+                <div style={styles.notificationItem}>
+                  <div style={styles.notificationAvatar}>S</div>
+                  <div>
+                    <p style={styles.notificationText}>Admin vừa phản hồi yêu cầu</p>
+                    <span style={styles.notificationTime}>10 phút trước</span>
+                  </div>
+                </div>
+                <div style={styles.notificationItem}>
+                  <div style={styles.notificationAvatar}>H</div>
+                  <div>
+                    <p style={styles.notificationText}>Có cập nhật mới từ hệ thống</p>
+                    <span style={styles.notificationTime}>30 phút trước</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* USER */}
-<div style={styles.userWrapper}>
-  <div
-    style={styles.userBox}
-    onClick={(e) => {
-       e.stopPropagation();
-      setShowUserMenu(!showUserMenu);
+          <div style={styles.userWrapper}>
+            <div
+              style={styles.userBox}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowUserMenu(!showUserMenu);
+                setShowNotifications(false);
+              }}
+            >
+              <div style={styles.avatar}>{userAvatar}</div>
+              <div>
+                <p style={styles.userName}>{userName}</p>
+                <p style={styles.userRole}>{userRole}</p>
+              </div>
+              <ChevronDown size={18} />
+            </div>
 
-      setShowNotifications(false);
-    }}
-  >
-    <div style={styles.avatar}>
-      T
-    </div>
-
-    <div>
-      <p style={styles.userName}>
-        Thinh Ngoc
-      </p>
-
-      <p style={styles.userRole}>
-        Nhân viên
-      </p>
-    </div>
-
-    <ChevronDown size={18} />
-  </div>
-
-  {showUserMenu && (
-    <div style={styles.userDropdown}>
-<button
-  style={styles.dropdownItem}
-  onClick={() => {
-    setShowProfileModal(true);
-    setShowUserMenu(false);
-  }}
->
-  <UserCog size={18} />
-
-  <span>
-    Cập nhật cá nhân
-  </span>
-</button>
-
-      <button style={styles.dropdownItem}>
-        <LogOut size={18} />
-
-        <span>Đăng xuất</span>
-      </button>
-    </div>
-  )}
-</div>
+            {showUserMenu && (
+              <div style={styles.userDropdown}>
+                <button
+                  style={styles.dropdownItem}
+                  onClick={() => {
+                    setShowProfileModal(true);
+                    setShowUserMenu(false);
+                  }}
+                >
+                  <UserCog size={18} />
+                  <span>Cập nhật cá nhân</span>
+                </button>
+                <button 
+                  style={styles.dropdownItem}
+                  onClick={handleLogout}
+                >
+                  <LogOut size={18} />
+                  <span>Đăng xuất</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* CONTENT */}
-      <div style={styles.content}>
-        {children}
-      </div>
+      <div style={styles.content}>{children}</div>
+
       {/* PROFILE MODAL */}
-{showProfileModal && (
-  <div
-    style={styles.modalOverlay}
-    onClick={() =>
-      setShowProfileModal(false)
-    }
-  >
-    <div
-      style={styles.modal}
-      onClick={(e) =>
-        e.stopPropagation()
-      }
-    >
-      {/* HEADER */}
-      <div style={styles.modalHeader}>
-        <div>
-          <h2 style={styles.modalTitle}>
-            Cập nhật thông tin
-          </h2>
-
-          <p style={styles.modalSubTitle}>
-            Chỉnh sửa thông tin cá nhân
-          </p>
-        </div>
-
-        <button
-          style={styles.closeButton}
-          onClick={() =>
-            setShowProfileModal(false)
-          }
+      {showProfileModal && (
+        <div
+          style={styles.modalOverlay}
+          onClick={() => setShowProfileModal(false)}
         >
-          ✕
-        </button>
-      </div>
+          <div
+            style={styles.modal}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* HEADER */}
+            <div style={styles.modalHeader}>
+              <div>
+                <h2 style={styles.modalTitle}>Cập nhật thông tin</h2>
+                <p style={styles.modalSubTitle}>Chỉnh sửa thông tin cá nhân</p>
+              </div>
+              <button
+                style={styles.closeButton}
+                onClick={() => setShowProfileModal(false)}
+              >
+                ✕
+              </button>
+            </div>
 
-      {/* AVATAR */}
-      <div style={styles.modalAvatarWrapper}>
-        <div style={styles.modalAvatar}>
-          T
+            {/* AVATAR */}
+            <div style={styles.modalAvatarWrapper}>
+              <div style={styles.modalAvatar}>{userAvatar}</div>
+              <button style={styles.changeAvatarBtn}>Đổi ảnh đại diện</button>
+            </div>
+
+            {/* EMAIL */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Email</label>
+              <input
+                type="email"
+                value={userEmail}
+                style={styles.input}
+                readOnly
+              />
+            </div>
+
+            {/* PHONE */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Số điện thoại</label>
+              <input
+                type="text"
+                value={userPhone}
+                style={styles.input}
+                placeholder="Chưa cập nhật"
+              />
+            </div>
+
+            {/* PASSWORD */}
+            <div style={styles.passwordSection}>
+              <h3 style={styles.sectionTitle}>Đổi mật khẩu</h3>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Mật khẩu cũ</label>
+                <input
+                  type="password"
+                  placeholder="Nhập mật khẩu cũ"
+                  style={styles.input}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Mật khẩu mới</label>
+                <input
+                  type="password"
+                  placeholder="Nhập mật khẩu mới"
+                  style={styles.input}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Xác nhận mật khẩu</label>
+                <input
+                  type="password"
+                  placeholder="Nhập lại mật khẩu"
+                  style={styles.input}
+                />
+              </div>
+            </div>
+
+            {/* BUTTON */}
+            <button style={styles.updateButton}>Cập nhật thông tin</button>
+          </div>
         </div>
-
-        <button style={styles.changeAvatarBtn}>
-          Đổi ảnh đại diện
-        </button>
-      </div>
-
-      {/* EMAIL */}
-      <div style={styles.formGroup}>
-        <label style={styles.label}>
-          Email
-        </label>
-
-        <input
-          type="email"
-          value="@gmail.com"
-          style={styles.input}
-          readOnly
-        />
-      </div>
-
-      {/* PHONE */}
-      <div style={styles.formGroup}>
-        <label style={styles.label}>
-          Số điện thoại
-        </label>
-
-        <input
-          type="text"
-          value="0"
-          style={styles.input}
-        />
-      </div>
-
-      {/* PASSWORD */}
-      <div style={styles.passwordSection}>
-        <h3 style={styles.sectionTitle}>
-          Đổi mật khẩu
-        </h3>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>
-            Mật khẩu cũ
-          </label>
-
-          <input
-            type="password"
-            placeholder="Nhập mật khẩu cũ"
-            style={styles.input}
-          />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>
-            Mật khẩu mới
-          </label>
-
-          <input
-            type="password"
-            placeholder="Nhập mật khẩu mới"
-            style={styles.input}
-          />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>
-            Xác nhận mật khẩu
-          </label>
-
-          <input
-            type="password"
-            placeholder="Nhập lại mật khẩu"
-            style={styles.input}
-          />
-        </div>
-      </div>
-
-      {/* BUTTON */}
-      <button style={styles.updateButton}>
-        Cập nhật thông tin
-      </button>
-    </div>
-  </div>
-)}
+      )}
     </div>
   );
 }
 
+// ... styles giữ nguyên
 const styles: {
   [key: string]: React.CSSProperties;
 } = {
