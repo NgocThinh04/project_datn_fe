@@ -897,7 +897,7 @@ const validateWorkflow = () => {
                 >
                   + Mới
                 </button>
-                <button
+                {/* <button
                   onClick={exportWorkflow}
                   style={{
                     flex: 1,
@@ -910,12 +910,12 @@ const validateWorkflow = () => {
                   }}
                 >
                   📤 Export
-                </button>
+                </button> */}
               </div>
-              <label style={{ fontSize: 12, cursor: "pointer", display: "block", marginBottom: 8 }}>
+              {/* <label style={{ fontSize: 12, cursor: "pointer", display: "block", marginBottom: 8 }}>
                 📥 Import: 
                 <input type="file" accept=".json" onChange={importWorkflow} style={{ marginLeft: 8, fontSize: 11 }} />
-              </label>
+              </label> */}
             </div>
 
             {isSwitchingWorkflow && (
