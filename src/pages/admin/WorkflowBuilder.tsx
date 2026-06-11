@@ -21,16 +21,14 @@ const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, ta
   const edgePath = `M ${sourceX} ${sourceY} C ${sourceX} ${(sourceY + targetY) / 2}, ${targetX} ${(sourceY + targetY) / 2}, ${targetX} ${targetY}`;
   
   const edgeColors: Record<string, string> = {
-    approval: "#3b82f6",
-    reject: "#ef4444",
-    conditional: "#10b981",
-    parallel: "#f59e0b",
+    conditional: "#3b82f6",
+    parallel: "#ef4444",
     default: "#6b7280"
   };
   
   const edgeColor = edgeColors[data?.type || "default"];
-  const edgeWidth = data?.type === "reject" ? 3 : 2;
-  const edgeDash = data?.type === "reject" ? "5,5" : data?.type === "conditional" ? "8,4" : "none";
+  const edgeWidth = data?.type === "parallel" ? 3 : 2;
+  const edgeDash = data?.type === "parallel" ? "5,5" : "none";
   
   return (
     <>
@@ -142,8 +140,7 @@ export default function WorkflowBuilder() {
   const [workflowName, setWorkflowName] = useState<string>("");
   const [workflowDescription, setWorkflowDescription] = useState<string>("");
 
-  // State cho chức vụ (positions) - lấy từ BE
- const [positions, setPositions] = useState<PositionType[]>([]);
+  const [positions, setPositions] = useState<PositionType[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [showAddPositionModal, setShowAddPositionModal] = useState(false);
   const [newPositionName, setNewPositionName] = useState("");
@@ -151,7 +148,7 @@ export default function WorkflowBuilder() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showProperties, setShowProperties] = useState(true);
   
-  const [edgeType, setEdgeType] = useState("approval");
+  const [edgeType, setEdgeType] = useState("conditional");
   const [edgeLabel, setEdgeLabel] = useState("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; edgeId: string | null } | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -163,38 +160,38 @@ export default function WorkflowBuilder() {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   /* ================= LOAD POSITIONS FROM BACKEND ================= */
-const loadPositions = async () => {
-  setPositionsLoading(true);
-  try {
-    const positionsFromBE = await positionService.getAllPositions();
-    console.log("📋 Positions from BE:", positionsFromBE);
-    setPositions(positionsFromBE);
-  } catch (err: any) {
-    console.error("Load positions error:", err);
-  } finally {
-    setPositionsLoading(false);
-  }
-};
+  const loadPositions = async () => {
+    setPositionsLoading(true);
+    try {
+      const positionsFromBE = await positionService.getAllPositions();
+      console.log("📋 Positions from BE:", positionsFromBE);
+      setPositions(positionsFromBE);
+    } catch (err: any) {
+      console.error("Load positions error:", err);
+    } finally {
+      setPositionsLoading(false);
+    }
+  };
 
   /* ================= ADD POSITION ================= */
-const handleAddPosition = async () => {
-  if (!newPositionName.trim()) {
-    alert("Vui lòng nhập tên chức vụ");
-    return;
-  }
+  const handleAddPosition = async () => {
+    if (!newPositionName.trim()) {
+      alert("Vui lòng nhập tên chức vụ");
+      return;
+    }
 
-  try {
-    await positionService.createPosition({ positionName: newPositionName.trim() });
-    console.log("✅ Created position");
-    await loadPositions();
-    setShowAddPositionModal(false);
-    setNewPositionName("");
-    alert("Thêm chức vụ thành công!");
-  } catch (err: any) {
-    console.error("Add position error:", err);
-    alert(err.message || "Thêm chức vụ thất bại");
-  }
-};
+    try {
+      await positionService.createPosition({ positionName: newPositionName.trim() });
+      console.log("✅ Created position");
+      await loadPositions();
+      setShowAddPositionModal(false);
+      setNewPositionName("");
+      alert("Thêm chức vụ thành công!");
+    } catch (err: any) {
+      console.error("Add position error:", err);
+      alert(err.message || "Thêm chức vụ thất bại");
+    }
+  };
 
   /* ================= DELETE POSITION ================= */
   const handleDeletePosition = async (positionId: string, positionName: string) => {
@@ -205,7 +202,6 @@ const handleAddPosition = async () => {
       console.log("✅ Deleted position:", positionId);
       await loadPositions();
       
-      // Xóa chức vụ khỏi các node nếu đang được sử dụng
       setNodes((nds) =>
         nds.map((n) =>
           n.data.assignedRole === positionName
@@ -552,43 +548,61 @@ const handleAddPosition = async () => {
   const onConnect = useCallback(
     (params: Connection) => {
       const edgeColors: Record<string, string> = {
-        approval: "#3b82f6",
-        reject: "#ef4444",
-        conditional: "#10b981",
-        parallel: "#f59e0b",
+        conditional: "#3b82f6",
+        parallel: "#ef4444",
+        default: "#6b7280"
       };
       
       const edgeDasharrays: Record<string, string> = {
-        approval: "none",
-        reject: "5,5",
-        conditional: "8,4",
-        parallel: "none",
+        conditional: "none",
+        parallel: "5,5",
+        default: "none"
+      };
+      
+      const edgeLabels: Record<string, string> = {
+        conditional: "Điều kiện",
+        parallel: "Song song"
       };
       
       const newEdge = {
         ...params,
         id: `edge_${Date.now()}`,
         type: "custom",
-        animated: edgeType !== "reject",
+        animated: edgeType !== "parallel",
         data: {
           type: edgeType,
-          label: edgeLabel || (edgeType === "approval" ? "Đồng ý" : edgeType === "reject" ? "Từ chối" : "Điều kiện"),
+          label: edgeLabel || edgeLabels[edgeType] || (edgeType === "conditional" ? "Điều kiện" : "Song song"),
         },
         style: {
-          stroke: edgeColors[edgeType],
-          strokeWidth: edgeType === "reject" ? 3 : 2,
-          strokeDasharray: edgeDasharrays[edgeType],
+          stroke: edgeColors[edgeType] || "#3b82f6",
+          strokeWidth: edgeType === "parallel" ? 3 : 2,
+          strokeDasharray: edgeDasharrays[edgeType] || "none",
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: edgeColors[edgeType],
+          color: edgeColors[edgeType] || "#3b82f6",
         },
       };
+      
       setEdges((eds) => addEdge(newEdge, eds));
       setEdgeLabel("");
       setIsConnecting(false);
+      
+      // Thông báo giải thích loại kết nối
+      const sourceNode = nodes.find(n => n.id === params.source);
+      if (sourceNode && sourceNode.data.label === "APPROVAL") {
+        if (edgeType === "conditional") {
+          setTimeout(() => {
+            alert("🔵 Kết nối ĐIỀU KIỆN (xanh):\n\n✅ Tất cả các phòng ban trong cùng bước phải duyệt xong mới chuyển tiếp!");
+          }, 100);
+        } else if (edgeType === "parallel") {
+          setTimeout(() => {
+            alert("🔴 Kết nối SONG SONG (đỏ):\n\n✅ Chỉ cần 1 trong các phòng ban duyệt là đủ để chuyển tiếp!");
+          }, 100);
+        }
+      }
     },
-    [setEdges, edgeType, edgeLabel]
+    [setEdges, edgeType, edgeLabel, nodes]
   );
 
   const updateEdge = useCallback((edgeId: string, updates: any) => {
@@ -667,7 +681,7 @@ const handleAddPosition = async () => {
   };
 
   /* ================= VALIDATION ================= */
-  const validateWorkflow = () => {
+const validateWorkflow = () => {
     const hasStart = nodes.some((n) => n.data.label === "START");
     const hasApproval = nodes.some((n) => n.data.label === "APPROVAL");
     const hasEnd = nodes.some((n) => n.data.label === "END");
@@ -1016,7 +1030,7 @@ const handleAddPosition = async () => {
 
             <hr style={{ borderColor: "#4b5563", margin: "16px 0" }} />
 
-            <h4 style={{ marginBottom: 12 }}>🔗 Loại connection</h4>
+            <h4 style={{ marginBottom: 12 }}>🔗 Loại kết nối</h4>
             <div style={{ marginBottom: 16 }}>
               <select
                 value={edgeType}
@@ -1031,14 +1045,28 @@ const handleAddPosition = async () => {
                   border: "none",
                 }}
               >
-                <option value="approval">Kết nối điều kiện - Xanh</option>
-                <option value="reject">Kết nối song song - Đỏ</option>
+                <option value="conditional">🔵 Kết nối điều kiện - Xanh (BẮT BUỘC tất cả cùng duyệt)</option>
+                <option value="parallel">🔴 Kết nối song song - Đỏ (CHỈ CẦN 1 người duyệt)</option>
               </select>
+              
+              {/* HƯỚNG DẪN CHI TIẾT */}
+              <div style={{ 
+                background: "#fef3c7", 
+                padding: 10, 
+                borderRadius: 8, 
+                marginTop: 10,
+                fontSize: 12,
+                color: "#92400e"
+              }}>
+                💡 <strong>Hướng dẫn tạo quy trình:</strong><br/>
+                <span style={{ color: "#3b82f6", fontWeight: "bold" }}>🔵 Kết nối điều kiện (xanh):</span> Tất cả phòng ban cùng cấp phải duyệt mới chuyển tiếp<br/>
+                <span style={{ color: "#ef4444", fontWeight: "bold" }}>🔴 Kết nối song song (đỏ):</span> Chỉ cần 1 phòng ban duyệt là đủ chuyển tiếp<br/>
+              
+              </div>
             </div>
 
             <hr style={{ borderColor: "#4b5563", margin: "16px 0" }} />
 
-            {/* DANH SÁCH CHỨC VỤ TỪ BE */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h4 style={{ margin: 0 }}>👥 Chức vụ ({positions.length})</h4>
               <button
@@ -1374,11 +1402,17 @@ const handleAddPosition = async () => {
               <>
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ fontWeight: 600, display: "block", marginBottom: 6, fontSize: 13 }}>
-                    🔗 Loại connection
+                    🔗 Loại kết nối
                   </label>
                   <select
-                    value={selectedEdge.data?.type || "approval"}
-                    onChange={(e) => updateEdge(selectedEdge.id, { type: e.target.value })}
+                    value={selectedEdge.data?.type || "conditional"}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      updateEdge(selectedEdge.id, { 
+                        type: newType,
+                        label: newType === "conditional" ? "Điều kiện" : "Song song"
+                      });
+                    }}
                     style={{
                       width: "100%",
                       padding: 10,
@@ -1387,9 +1421,23 @@ const handleAddPosition = async () => {
                       fontSize: 14,
                     }}
                   >
-                    <option value="approval">Kết nối điều kiện - Xanh</option>
-                    <option value="reject">Kết nối song song - Đỏ</option>
+                    <option value="conditional">🔵 Kết nối điều kiện - Xanh (BẮT BUỘC tất cả cùng duyệt)</option>
+                    <option value="parallel">🔴 Kết nối song song - Đỏ (CHỈ CẦN 1 người duyệt)</option>
                   </select>
+                  
+                  {/* Hiển thị giải thích */}
+                  <div style={{
+                    marginTop: 10,
+                    padding: 8,
+                    background: selectedEdge.data?.type === "conditional" ? "#dbeafe" : "#fee2e2",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    color: selectedEdge.data?.type === "conditional" ? "#1e40af" : "#991b1b"
+                  }}>
+                    {selectedEdge.data?.type === "conditional" 
+                      ? "🔵 Tất cả các phòng ban trong cùng bước phải duyệt xong mới chuyển tiếp!"
+                      : "🔴 Chỉ cần 1 trong các phòng ban duyệt là đủ để chuyển tiếp!"}
+                  </div>
                 </div>
 
                 <button

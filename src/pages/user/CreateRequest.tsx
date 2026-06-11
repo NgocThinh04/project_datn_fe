@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Paperclip, Loader2 } from "lucide-react";
+import { Paperclip, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import approvalService, { type WorkflowDTO } from "../../services/user/approvalService"
+import requestService from "../../services/user/requestService";
 
 export default function CreateRequest() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   const [loading, setLoading] = useState(false);
   const [workflows, setWorkflows] = useState<WorkflowDTO[]>([]);
   const [loadingWorkflows, setLoadingWorkflows] = useState(true);
@@ -16,11 +21,84 @@ export default function CreateRequest() {
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  
+  // State cho edit mode
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [changeRequestNote, setChangeRequestNote] = useState("");
 
   // Load workflows khi component mount
   useEffect(() => {
     loadWorkflows();
+    checkEditMode();
   }, []);
+
+  // Kiểm tra edit mode và load dữ liệu
+  const checkEditMode = async () => {
+    const params = new URLSearchParams(location.search);
+    const editIdParam = params.get('edit');
+    
+    if (editIdParam) {
+      setIsEditMode(true);
+      setEditId(editIdParam);
+      
+      // Đọc dữ liệu từ sessionStorage
+      const savedData = sessionStorage.getItem("editRequestData");
+      console.log("📖 Loaded edit data from sessionStorage:", savedData);
+      
+      if (savedData) {
+        try {
+          const editData = JSON.parse(savedData);
+          setForm({
+            title: editData.title || "",
+            description: editData.description || "",
+            requestType: editData.requestType || "",
+            note: "",
+          });
+          
+          if (editData.changeRequestNote) {
+            setChangeRequestNote(editData.changeRequestNote);
+            // Hiển thị thông báo cho người dùng
+            setTimeout(() => {
+              showToast(`📝 Yêu cầu chỉnh sửa: ${editData.changeRequestNote}`, "error");
+            }, 500);
+          }
+          
+          // Xóa dữ liệu sau khi đọc
+          sessionStorage.removeItem("editRequestData");
+        } catch (error) {
+          console.error("Error parsing edit data:", error);
+        }
+      } else {
+        // Nếu không có trong sessionStorage, thử load từ API
+        await loadRequestData(editIdParam);
+      }
+    }
+  };
+
+  // Load dữ liệu request từ API
+  const loadRequestData = async (requestId: string) => {
+    try {
+      const data = await requestService.getRequestDetail(requestId);
+      setForm({
+        title: data.title || "",
+        description: data.description || "",
+        requestType: data.requestType || "",
+        note: "",
+      });
+      
+      // Tìm nội dung chỉnh sửa từ actions
+      const changeAction = data.actions?.find(a => a.action === "REQUEST_CHANGES");
+      if (changeAction?.rejectionReason) {
+        setChangeRequestNote(changeAction.rejectionReason);
+        setTimeout(() => {
+          showToast(`📝 Yêu cầu chỉnh sửa: ${changeAction.rejectionReason}`, "error");
+        }, 500);
+      }
+    } catch (error) {
+      console.error("Error loading request data:", error);
+    }
+  };
 
   const loadWorkflows = async () => {
     setLoadingWorkflows(true);
@@ -68,27 +146,39 @@ export default function CreateRequest() {
         throw new Error("Không tìm thấy thông tin công ty");
       }
 
-      const result = await approvalService.submitRequest({
-        companyId,
-        title: form.title,
-        description: form.description,
-        requestType: form.requestType,
-        note: form.note,
-      });
-
-      showToast(result.message || "Gửi yêu cầu thành công!", "success");
-      
-      // Reset form
-      setForm({
-        title: "",
-        description: "",
-        requestType: workflows.length > 0 ? workflows[0].name : "",
-        note: "",
-      });
-      setSelectedFile(null);
+      if (isEditMode && editId) {
+        // Cập nhật yêu cầu đã chỉnh sửa
+        await requestService.updateRequest(editId, {
+          title: form.title,
+          description: form.description,
+          requestType: form.requestType,
+          note: form.note,
+        });
+        showToast("Cập nhật yêu cầu thành công!", "success");
+        navigate("/user/sent-requests");
+      } else {
+        // Tạo yêu cầu mới
+        const result = await approvalService.submitRequest({
+          companyId,
+          title: form.title,
+          description: form.description,
+          requestType: form.requestType,
+          note: form.note,
+        });
+        showToast(result.message || "Gửi yêu cầu thành công!", "success");
+        
+        // Reset form
+        setForm({
+          title: "",
+          description: "",
+          requestType: workflows.length > 0 ? workflows[0].name : "",
+          note: "",
+        });
+        setSelectedFile(null);
+      }
       
     } catch (error: any) {
-      showToast(error.error || "Gửi yêu cầu thất bại", "error");
+      showToast(error.error || (isEditMode ? "Cập nhật thất bại" : "Gửi yêu cầu thất bại"), "error");
     } finally {
       setLoading(false);
     }
@@ -109,7 +199,28 @@ export default function CreateRequest() {
       )}
 
       <div style={styles.card}>
-        <h1 style={styles.title}>Tạo yêu cầu mới</h1>
+        {/* Header với nút back */}
+        <div style={styles.header}>
+          <button onClick={() => navigate(-1)} style={styles.backButton}>
+            <ArrowLeft size={20} />
+            Quay lại
+          </button>
+          <h1 style={styles.title}>
+            {isEditMode ? "✏️ Chỉnh sửa yêu cầu" : "📝 Tạo yêu cầu mới"}
+          </h1>
+          <div style={{ width: 40 }} />
+        </div>
+
+        {/* Thông báo yêu cầu chỉnh sửa */}
+        {changeRequestNote && (
+          <div style={styles.changeRequestAlert}>
+            <AlertCircle size={18} color="#d97706" />
+            <div style={styles.changeRequestAlertContent}>
+              <strong>Yêu cầu chỉnh sửa từ người duyệt:</strong>
+              <p style={styles.changeRequestAlertText}>{changeRequestNote}</p>
+            </div>
+          </div>
+        )}
 
         <input
           placeholder="Tiêu đề yêu cầu *"
@@ -174,7 +285,7 @@ export default function CreateRequest() {
         </div>
 
         <button style={styles.button} onClick={handleSubmit} disabled={loading}>
-          {loading ? <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} /> : "Gửi yêu cầu"}
+          {loading ? <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} /> : (isEditMode ? "Cập nhật yêu cầu" : "Gửi yêu cầu")}
         </button>
       </div>
 
@@ -226,11 +337,48 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 20,
     boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
   },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  backButton: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "8px 16px",
+    background: "#f1f5f9",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontSize: 14,
+    color: "#475569",
+    fontWeight: 500,
+  },
   title: {
     margin: 0,
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 800,
     color: "#0f172a",
+    textAlign: "center",
+  },
+  changeRequestAlert: {
+    display: "flex",
+    gap: 12,
+    padding: 16,
+    background: "#fffbeb",
+    border: "1px solid #fde68a",
+    borderRadius: 16,
+  },
+  changeRequestAlertContent: {
+    flex: 1,
+  },
+  changeRequestAlertText: {
+    margin: "8px 0 0 0",
+    fontSize: 14,
+    color: "#92400e",
+    lineHeight: 1.5,
   },
   label: {
     fontSize: 14,

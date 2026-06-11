@@ -1,11 +1,16 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, ChevronLeft, ChevronRight, Calendar, SortAsc, SortDesc } from "lucide-react";
+import requestService, { type ApprovalRequest } from "../../services/user/requestService";
 
 export default function Requests() {
   const navigate = useNavigate();
 
   // ==================== STATES ====================
+  const [requests, setRequests] = useState<ApprovalRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<"date" | "title" | "status">("date");
@@ -15,30 +20,79 @@ export default function Requests() {
   
   const ITEMS_PER_PAGE = 5;
 
-  // ==================== MOCK DATA ====================
-  const requests = [
-    { id: 1, title: "Cấp lại tài khoản", status: "Đã duyệt", date: "12/05/2026", requester: "Nguyễn Văn A", type: "Tài khoản" },
-    { id: 2, title: "Yêu cầu thiết bị mới", status: "Đang xử lý", date: "10/05/2026", requester: "Trần Thị B", type: "Thiết bị" },
-    { id: 3, title: "Reset mật khẩu", status: "Từ chối", date: "08/05/2026", requester: "Lê Văn C", type: "Tài khoản" },
-    { id: 4, title: "Cấp quyền hệ thống", status: "Yêu cầu chỉnh sửa lại", date: "06/05/2026", requester: "Phạm Thị D", type: "Quyền" },
-    { id: 5, title: "Cập nhật thông tin", status: "Đã duyệt", date: "03/05/2026", requester: "Hoàng Văn E", type: "Thông tin" },
-    { id: 6, title: "Xin nghỉ phép", status: "Đang xử lý", date: "15/05/2026", requester: "Nguyễn Văn F", type: "Nhân sự" },
-    { id: 7, title: "Đăng ký khóa học", status: "Đã duyệt", date: "14/05/2026", requester: "Trần Văn G", type: "Đào tạo" },
-    { id: 8, title: "Mua sắm văn phòng phẩm", status: "Đang xử lý", date: "13/05/2026", requester: "Lê Thị H", type: "Vật tư" },
-    { id: 9, title: "Bảo trì máy tính", status: "Đã duyệt", date: "11/05/2026", requester: "Nguyễn Văn I", type: "Kỹ thuật" },
-    { id: 10, title: "Hỗ trợ phần mềm", status: "Từ chối", date: "09/05/2026", requester: "Phạm Văn J", type: "Công nghệ" },
-    { id: 11, title: "Cấp thẻ nhân viên", status: "Đang xử lý", date: "07/05/2026", requester: "Hoàng Thị K", type: "Nhân sự" },
-    { id: 12, title: "Đề xuất tăng lương", status: "Đã duyệt", date: "05/05/2026", requester: "Trần Văn L", type: "Lương" },
-  ];
+  // ==================== LOAD DATA ====================
+  const loadRequests = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await requestService.getPendingRequests();
+      setRequests(data);
+      console.log("✅ Loaded requests:", data);
+    } catch (err: any) {
+      console.error("Load requests error:", err);
+      setError(err.message || "Không thể tải danh sách yêu cầu");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // ==================== FILTER & SORT FUNCTIONS ====================
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  // ==================== HELPER FUNCTIONS ====================
   
+  // Chuyển đổi status từ BE sang tiếng Việt
+  const getStatusText = (status: string): string => {
+    switch (status) {
+      case "APPROVED":
+        return "Đã duyệt";
+      case "PENDING":
+        return "Đang xử lý";
+      case "REJECTED":
+        return "Từ chối";
+      case "CANCELLED":
+        return "Đã hủy";
+      case "IN_PROGRESS":
+        return "Đang xử lý";
+      case "REQUEST_CHANGES":
+        return "Yêu cầu chỉnh sửa";
+      default:
+        return status;
+    }
+  };
+
+  // Lấy style cho status
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case "APPROVED":
+        return { background: "#dcfce7", color: "#166534" };
+      case "PENDING":
+        return { background: "#fef3c7", color: "#92400e" };
+      case "REJECTED":
+        return { background: "#fee2e2", color: "#991b1b" };
+      default:
+        return { background: "#fef3c7", color: "#92400e" };
+    }
+  };
+
+  // Format date
+  const formatDate = (dateStr: string): string => {
+    if (!dateStr) return "N/A";
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString("vi-VN");
+    } catch {
+      return dateStr;
+    }
+  };
+
   // Lọc theo ngày
   const filterByDate = (dateStr: string, range: string): boolean => {
-    if (range === "all") return true;
+    if (range === "all" || !dateStr) return true;
     
     const today = new Date();
-    const itemDate = new Date(dateStr.split("/").reverse().join("-"));
+    const itemDate = new Date(dateStr);
     const diffTime = today.getTime() - itemDate.getTime();
     const diffDays = diffTime / (1000 * 60 * 60 * 24);
     
@@ -64,32 +118,33 @@ export default function Requests() {
       result = result.filter(
         (item) =>
           item.title.toLowerCase().includes(keyword) ||
-          item.status.toLowerCase().includes(keyword) ||
-          item.date.includes(keyword) ||
-          item.requester.toLowerCase().includes(keyword) ||
-          item.type.toLowerCase().includes(keyword)
+          getStatusText(item.status).toLowerCase().includes(keyword) ||
+          formatDate(item.createdAt).includes(keyword) ||
+          item.requestCode?.toLowerCase().includes(keyword) ||
+          item.requestType?.toLowerCase().includes(keyword) ||
+          item.requesterName?.toLowerCase().includes(keyword)
       );
     }
     
     // 2. Lọc theo trạng thái
     if (filterStatus !== "all") {
-      result = result.filter((item) => item.status === filterStatus);
+      result = result.filter((item) => getStatusText(item.status) === filterStatus);
     }
     
     // 3. Lọc theo thời gian
-    result = result.filter((item) => filterByDate(item.date, filterDateRange));
+    result = result.filter((item) => filterByDate(item.createdAt, filterDateRange));
     
     // 4. Sắp xếp
     result.sort((a, b) => {
       let comparison = 0;
       if (sortBy === "date") {
-        const dateA = new Date(a.date.split("/").reverse().join("-"));
-        const dateB = new Date(b.date.split("/").reverse().join("-"));
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
         comparison = dateA.getTime() - dateB.getTime();
       } else if (sortBy === "title") {
         comparison = a.title.localeCompare(b.title);
       } else if (sortBy === "status") {
-        comparison = a.status.localeCompare(b.status);
+        comparison = getStatusText(a.status).localeCompare(getStatusText(b.status));
       }
       return sortOrder === "asc" ? comparison : -comparison;
     });
@@ -104,12 +159,10 @@ export default function Requests() {
     currentPage * ITEMS_PER_PAGE
   );
 
-  // Reset về trang 1 khi thay đổi bộ lọc
   const handleFilterChange = () => {
     setCurrentPage(1);
   };
 
-  // Đổi sắp xếp
   const toggleSort = (field: "date" | "title" | "status") => {
     if (sortBy === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -120,19 +173,32 @@ export default function Requests() {
     setCurrentPage(1);
   };
 
-  // Get status style
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "Đã duyệt":
-        return { background: "#dcfce7", color: "#166534" };
-      case "Đang xử lý":
-        return { background: "#fef3c7", color: "#92400e" };
-      case "Từ chối":
-        return { background: "#fee2e2", color: "#991b1b" };
-      default:
-        return { background: "#fef3c7", color: "#92400e" };
-    }
+  // Xử lý click vào yêu cầu
+  const handleRequestClick = (requestId: string) => {
+    navigate(`/user/request/${requestId}`);
   };
+
+  // ==================== RENDER ====================
+  if (loading) {
+    return (
+      <div style={styles.loadingContainer}>
+        <div style={styles.loadingSpinner}></div>
+        <p>Đang tải danh sách yêu cầu...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.errorContainer}>
+        <div style={styles.errorIcon}>❌</div>
+        <p style={styles.errorText}>{error}</p>
+        <button onClick={loadRequests} style={styles.retryButton}>
+          Thử lại
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
@@ -151,7 +217,6 @@ export default function Requests() {
 
       {/* FILTER BAR */}
       <div style={styles.filterBar}>
-        {/* Search Box */}
         <div style={styles.searchBox}>
           <Search size={18} color="#64748b" />
           <input
@@ -166,7 +231,6 @@ export default function Requests() {
           />
         </div>
 
-        {/* Status Filter */}
         <select
           value={filterStatus}
           onChange={(e) => {
@@ -179,10 +243,8 @@ export default function Requests() {
           <option value="Đã duyệt">✅ Đã duyệt</option>
           <option value="Đang xử lý">🔄 Đang xử lý</option>
           <option value="Từ chối">❌ Từ chối</option>
-          <option value="Yêu cầu chỉnh sửa lại">✏️ Yêu cầu chỉnh sửa lại</option>
         </select>
 
-        {/* Date Filter */}
         <select
           value={filterDateRange}
           onChange={(e) => {
@@ -253,19 +315,33 @@ export default function Requests() {
             <div
               key={item.id}
               style={styles.card}
-              onClick={() => navigate(`/user/request/${item.id}`)}
+              onClick={() => handleRequestClick(item.id)}
             >
               <div style={styles.cardContent}>
                 <div style={styles.cardHeader}>
-                  <h3 style={styles.requestTitle}>{item.title}</h3>
+                  <div>
+                    <h3 style={styles.requestTitle}>{item.title}</h3>
+                    <span style={styles.requestCode}>{item.requestCode}</span>
+                  </div>
                   <div style={{ ...styles.status, ...getStatusStyle(item.status) }}>
-                    {item.status}
+                    {getStatusText(item.status)}
                   </div>
                 </div>
                 <div style={styles.cardDetails}>
-                  <span style={styles.detailItem}>👤 {item.requester}</span>
-                  <span style={styles.detailItem}>📂 {item.type}</span>
-                  <span style={styles.detailItem}>📅 {item.date}</span>
+                  <span style={styles.detailItem}>
+                    👤 {item.requesterName || "Không rõ"}
+                  </span>
+                  <span style={styles.detailItem}>
+                    📂 {item.requestType || "Không xác định"}
+                  </span>
+                  <span style={styles.detailItem}>
+                    📅 {formatDate(item.createdAt)}
+                  </span>
+                  {item.currentStepName && (
+                    <span style={styles.detailItem}>
+                      ⚡ Bước: {item.currentStepName}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -489,6 +565,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 700,
     color: "#0f172a",
   },
+  requestCode: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 4,
+    display: "block",
+  },
   status: {
     padding: "6px 14px",
     borderRadius: 12,
@@ -569,5 +651,48 @@ const styles: { [key: string]: React.CSSProperties } = {
   emptySubText: {
     fontSize: 14,
     color: "#64748b",
+  },
+  loadingContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    height: "100%",
+    minHeight: 400,
+    gap: 16,
+  },
+  loadingSpinner: {
+    width: 40,
+    height: 40,
+    border: "3px solid #e2e8f0",
+    borderTop: "3px solid #3b82f6",
+    borderRadius: "50%",
+    animation: "spin 1s linear infinite",
+  },
+  errorContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    height: "100%",
+    minHeight: 400,
+    gap: 16,
+  },
+  errorIcon: {
+    fontSize: 48,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#ef4444",
+  },
+  retryButton: {
+    padding: "10px 20px",
+    background: "#3b82f6",
+    color: "white",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 600,
   },
 };

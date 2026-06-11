@@ -13,7 +13,7 @@ export interface WorkflowNode {
 }
 
 export interface WorkflowEdge {
-  id: string;  // THÊM id bắt buộc cho ReactFlow
+  id: string;
   source: string;
   target: string;
   type: string;
@@ -27,7 +27,7 @@ export interface WorkflowEdge {
 }
 
 export interface WorkflowData {
-  workflowId: string;  // CHỈ DÙNG workflowId (từ database)
+  workflowId: string;
   name: string;
   description?: string;
   nodes: WorkflowNode[];
@@ -46,30 +46,81 @@ export interface ApiResponse<T = any> {
 }
 
 const workflowService = {
-  // Lấy tất cả workflows theo companyId
-getAllWorkflows: async (): Promise<WorkflowData[]> => {
-  try {
-    const companyId = localStorage.getItem('companyId');
-    console.log('🏢 Getting workflows for companyId:', companyId);
-    
-    const response = await axiosInstance.get('/workflows', {
-      params: { companyId: companyId }
-    });
-    
-    console.log('📡 Workflows response:', response.data);
-    
-    let workflowsData: any[] = [];
-    if (Array.isArray(response.data)) {
-      workflowsData = response.data;
-    } else if (response.data?.data && Array.isArray(response.data.data)) {
-      workflowsData = response.data.data;
-    } else if (response.data?.content && Array.isArray(response.data.content)) {
-      workflowsData = response.data.content;
+  getAllWorkflows: async (): Promise<WorkflowData[]> => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      console.log('🏢 Getting workflows for companyId:', companyId);
+      
+      const response = await axiosInstance.get('/workflows', {
+        params: { companyId: companyId }
+      });
+      
+      console.log('📡 Workflows response:', response.data);
+      
+      let workflowsData: any[] = [];
+      if (Array.isArray(response.data)) {
+        workflowsData = response.data;
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        workflowsData = response.data.data;
+      } else if (response.data?.content && Array.isArray(response.data.content)) {
+        workflowsData = response.data.content;
+      }
+      
+      return workflowsData.map((wf: any) => {
+        let nodesArray: any[] = [];
+        if (wf.nodes) {
+          if (Array.isArray(wf.nodes)) {
+            nodesArray = wf.nodes;
+          } else if (typeof wf.nodes === 'string') {
+            try {
+              nodesArray = JSON.parse(wf.nodes);
+            } catch (e) {
+              nodesArray = [];
+            }
+          }
+        }
+        
+        let edgesArray: any[] = [];
+        if (wf.edges) {
+          if (Array.isArray(wf.edges)) {
+            edgesArray = wf.edges;
+          } else if (typeof wf.edges === 'string') {
+            try {
+              edgesArray = JSON.parse(wf.edges);
+            } catch (e) {
+              edgesArray = [];
+            }
+          } else if (typeof wf.edges === 'object') {
+            edgesArray = Object.values(wf.edges);
+          }
+        }
+        
+        edgesArray = edgesArray.map((edge: any, index: number) => ({
+          ...edge,
+          id: edge.id || `${edge.source}-${edge.target}-${index}`
+        }));
+        
+        return {
+          ...wf,
+          workflowId: wf.workflowId || wf.id,
+          nodes: nodesArray,
+          edges: edgesArray
+        };
+      });
+    } catch (error: any) {
+      console.error('Get workflows error:', error);
+      throw error.response?.data || { error: 'Failed to get workflows' };
     }
-    
-    // Đảm bảo mỗi workflow có dữ liệu đúng format
-    return workflowsData.map((wf: any) => {
-      // Xử lý nodes
+  },
+
+  getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
+    try {
+      console.log('🔍 Getting workflow by id:', workflowId);
+      const response = await axiosInstance.get(`/workflows/${workflowId}`);
+      console.log('📡 Raw response:', response.data);
+      
+      const wf = response.data;
+      
       let nodesArray: any[] = [];
       if (wf.nodes) {
         if (Array.isArray(wf.nodes)) {
@@ -80,10 +131,11 @@ getAllWorkflows: async (): Promise<WorkflowData[]> => {
           } catch (e) {
             nodesArray = [];
           }
+        } else {
+          nodesArray = [];
         }
       }
       
-      // Xử lý edges
       let edgesArray: any[] = [];
       if (wf.edges) {
         if (Array.isArray(wf.edges)) {
@@ -94,99 +146,37 @@ getAllWorkflows: async (): Promise<WorkflowData[]> => {
           } catch (e) {
             edgesArray = [];
           }
-        } else if (typeof wf.edges === 'object') {
-          edgesArray = Object.values(wf.edges);
+        } else {
+          edgesArray = [];
         }
       }
       
-      // Đảm bảo mỗi edge có id
       edgesArray = edgesArray.map((edge: any, index: number) => ({
         ...edge,
         id: edge.id || `${edge.source}-${edge.target}-${index}`
       }));
       
+      console.log('✅ Processed nodes:', nodesArray.length);
+      console.log('✅ Processed edges:', edgesArray.length);
+      
       return {
-        ...wf,
-        workflowId: wf.workflowId || wf.id,
+        workflowId: wf.workflowId,
+        name: wf.name,
+        description: wf.description || '',
+        status: wf.status || 'draft',
+        version: wf.version || 1,
+        createdBy: wf.createdBy,
+        createdAt: wf.createdAt,
+        updatedAt: wf.updatedAt,
         nodes: nodesArray,
         edges: edgesArray
       };
-    });
-  } catch (error: any) {
-    console.error('Get workflows error:', error);
-    throw error.response?.data || { error: 'Failed to get workflows' };
-  }
-},
-
-  // Lấy workflow theo workflowId
-getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
-  try {
-    console.log('🔍 Getting workflow by id:', workflowId);
-    const response = await axiosInstance.get(`/workflows/${workflowId}`);
-    console.log('📡 Raw response:', response.data);
-    
-    const wf = response.data;
-    
-    // Xử lý nodes - đảm bảo là mảng
-    let nodesArray: any[] = [];
-    if (wf.nodes) {
-      if (Array.isArray(wf.nodes)) {
-        nodesArray = wf.nodes;
-      } else if (typeof wf.nodes === 'string') {
-        try {
-          nodesArray = JSON.parse(wf.nodes);
-        } catch (e) {
-          nodesArray = [];
-        }
-      } else {
-        nodesArray = [];
-      }
+    } catch (error: any) {
+      console.error('Get workflow by id error:', error);
+      throw error.response?.data || { error: 'Failed to get workflow' };
     }
-    
-    // Xử lý edges - đảm bảo là mảng
-    let edgesArray: any[] = [];
-    if (wf.edges) {
-      if (Array.isArray(wf.edges)) {
-        edgesArray = wf.edges;
-      } else if (typeof wf.edges === 'string') {
-        try {
-          edgesArray = JSON.parse(wf.edges);
-        } catch (e) {
-          edgesArray = [];
-        }
-      } else {
-        edgesArray = [];
-      }
-    }
-    
-    // Đảm bảo mỗi edge có id
-    edgesArray = edgesArray.map((edge: any, index: number) => ({
-      ...edge,
-      id: edge.id || `${edge.source}-${edge.target}-${index}`
-    }));
-    
-    console.log('✅ Processed nodes:', nodesArray.length);
-    console.log('✅ Processed edges:', edgesArray.length);
-    
-    return {
-      workflowId: wf.workflowId,
-      name: wf.name,
-      description: wf.description || '',
-      status: wf.status || 'draft',
-      version: wf.version || 1,
-      createdBy: wf.createdBy,
-      createdAt: wf.createdAt,
-      updatedAt: wf.updatedAt,
-      nodes: nodesArray,
-      edges: edgesArray
-    };
-  } catch (error: any) {
-    console.error('Get workflow by id error:', error);
-    throw error.response?.data || { error: 'Failed to get workflow' };
-  }
-},
+  },
 
-  // Tạo mới workflow
   createWorkflow: async (workflow: Omit<WorkflowData, 'workflowId'>): Promise<WorkflowData> => {
     try {
       const companyId = localStorage.getItem('companyId');
@@ -212,7 +202,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
       
       let createdWorkflow = response.data?.data || response.data;
       
-      // Parse lại nodes và edges từ JSON string nếu cần
       if (createdWorkflow.nodes && typeof createdWorkflow.nodes === 'string') {
         createdWorkflow.nodes = JSON.parse(createdWorkflow.nodes);
       }
@@ -220,7 +209,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
         createdWorkflow.edges = JSON.parse(createdWorkflow.edges);
       }
       
-      // Đảm bảo edges có id
       if (createdWorkflow.edges) {
         createdWorkflow.edges = createdWorkflow.edges.map((edge: any) => ({
           ...edge,
@@ -240,10 +228,10 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
     }
   },
 
-  // Cập nhật workflow
   updateWorkflow: async (workflowId: string, workflow: Partial<WorkflowData>): Promise<WorkflowData> => {
     try {
       const companyId = localStorage.getItem('companyId');
+      
       const payload = {
         companyId: companyId,
         name: workflow.name,
@@ -260,7 +248,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
       
       let updatedWorkflow = response.data?.data || response.data;
       
-      // Parse lại nodes và edges từ JSON string nếu cần
       if (updatedWorkflow.nodes && typeof updatedWorkflow.nodes === 'string') {
         updatedWorkflow.nodes = JSON.parse(updatedWorkflow.nodes);
       }
@@ -268,7 +255,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
         updatedWorkflow.edges = JSON.parse(updatedWorkflow.edges);
       }
       
-      // Đảm bảo edges có id
       if (updatedWorkflow.edges) {
         updatedWorkflow.edges = updatedWorkflow.edges.map((edge: any) => ({
           ...edge,
@@ -288,7 +274,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
     }
   },
 
-  // Xóa workflow
   deleteWorkflow: async (workflowId: string): Promise<{ success: boolean; message: string }> => {
     try {
       console.log('🗑️ Deleting workflow:', workflowId);
@@ -303,7 +288,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
     }
   },
 
-  // Cập nhật status workflow
   updateWorkflowStatus: async (workflowId: string, status: 'active' | 'inactive'): Promise<WorkflowData> => {
     try {
       const response = await axiosInstance.patch(`/workflows/${workflowId}/status`, { status });
@@ -322,7 +306,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
     }
   },
 
-  // Duplicate workflow
   duplicateWorkflow: async (workflowId: string, newName: string): Promise<WorkflowData> => {
     try {
       console.log('📋 Duplicating workflow:', workflowId);
@@ -330,7 +313,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
       
       let duplicatedWorkflow = response.data?.data || response.data;
       
-      // Đảm bảo edges có id
       if (duplicatedWorkflow.edges) {
         duplicatedWorkflow.edges = duplicatedWorkflow.edges.map((edge: any) => ({
           ...edge,
@@ -350,7 +332,6 @@ getWorkflowById: async (workflowId: string): Promise<WorkflowData> => {
     }
   },
 
-  // Validate workflow trước khi save
   validateWorkflowData: (workflow: Partial<WorkflowData>): { valid: boolean; errors: string[] } => {
     const errors: string[] = [];
     
