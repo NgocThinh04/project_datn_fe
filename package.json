@@ -1,18 +1,39 @@
 {
   "name": "project_datn_fe",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "main": "electron/main.js",
+  "version": "1.0.0",
+  "main": "electron/main.cjs",
+  "description": "Electronic Office Desktop Application",
+  "author": "Your Name",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:dev": "npm run dev & wait-on http://localhost:5173 && NODE_ENV=development electron .",
-    "electron:build": "npm run build && electron-builder",
-    "electron:package": "electron-builder --dir",
-    "electron:dist": "electron-builder"
+    "electron:dev": "npm run build && cross-env NODE_ENV=development electron .",
+    "electron:portable": "npm run build && electron-builder --win portable --publish never",
+    "electron:package": "electron-packager . --platform=win32 --arch=x64 --out=release --overwrite --icon=public/icon.ico"
+  },
+  "build": {
+    "appId": "com.electronicoffice.app",
+    "productName": "Electronic Office",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "public/icon.ico",
+      "sign": false
+    },
+    "portable": {
+      "artifactName": "ElectronicOffice.exe"
+    }
   },
   "dependencies": {
     "@types/react-router-dom": "^5.3.3",
@@ -25,14 +46,16 @@
     "reactflow": "^11.11.4"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.2",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "cross-env": "^7.0.3",
-    "electron": "^42.2.0",
+    "electron": "^42.4.0",
     "electron-builder": "^24.13.3",
+    "electron-packager": "^17.1.2",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
@@ -41,38 +64,5 @@
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10",
     "wait-on": "^7.2.0"
-  },
-  "build": {
-    "appId": "com.yourcompany.projectdatnfe",
-    "productName": "Project DATN FE",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "build/icon.ico"
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "icon": "build/icon.icns"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "icon": "build/icon.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
   }
 }

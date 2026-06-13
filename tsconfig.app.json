@@ -22,5 +22,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "electron/preload.js", "electron/main.js"]
+  "include": ["src", "electron/main.cjs"]
 }
